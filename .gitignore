@@ -63,3 +63,5 @@ _darcs
 /projects/*/datasets
 /models
 /snippet
+
+!lvis_categories.json
