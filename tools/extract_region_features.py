@@ -66,6 +66,9 @@ def get_inputs(cfg, image):
         np.ascontiguousarray(image.transpose(2, 0, 1))
     )
 
+    dataset_dict["scale_y"] = h / dataset_dict["height"]
+    dataset_dict["scale_x"] = w / dataset_dict["width"]
+
     return [dataset_dict]
 
 
@@ -104,6 +107,8 @@ def extract_region_feats(cfg, model, batched_inputs, gold_bbox=None):
     """Given a model and the input images, extract region features and save detection outputs into a local file
     (refer to detectron2/modeling/meta_arch/clip_rcnn.py)
     """
+    im_id = 0  # single image
+
     # model inference
     # 1. localization branch: offline modules to get the region proposals
     images = model.offline_preprocess_image(batched_inputs)
@@ -137,7 +142,6 @@ def extract_region_feats(cfg, model, batched_inputs, gold_bbox=None):
         )  # re-scale boxes back to original image size
 
         # save detection outputs into files
-        im_id = 0  # single image
         boxes = (
             results[im_id]["instances"].get("pred_boxes").tensor.cpu()
         )  # boxes after per-class NMS, [#boxes, 4]
@@ -155,9 +159,15 @@ def extract_region_feats(cfg, model, batched_inputs, gold_bbox=None):
         boxes = torch.tensor([list(x["rect"].values()) for x in gold_bbox]).to(
             model.device
         )
+        # resize boxes
+        scaled_boxes = Boxes(boxes)
+        scaled_boxes.scale(
+            scale_x=batched_inputs[im_id]["scale_x"], scale_y=batched_inputs[im_id]["scale_y"]
+        )
+
         box_features = model.roi_heads._shared_roi_transform(
             [features[f] for f in model.roi_heads.in_features],
-            [Boxes(boxes)],
+            [scaled_boxes],
             model.backbone.layer4,
         )
         att_feats = model.backbone.attnpool(box_features)  # region features
