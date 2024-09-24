@@ -209,9 +209,9 @@ def main(args):
     # extract features per images
     start = time.time()
     results = []
-    for i, img_file_name in enumerate(image_files):
+    for image_idx, img_file_name in enumerate(image_files):
         res = []
-        if i % 100 == 0:
+        if (image_idx + 1) % 100 == 0:
             print("Used {} seconds for 100 images.".format(time.time() - start))
             start = time.time()
 
@@ -225,7 +225,7 @@ def main(args):
 
         # extract gold features
         # # [ {"imageId", "instanceId", "rect", "className"}, ... ]
-        gold_bbox = visual_annotations[i]["boundingBoxes"]
+        gold_bbox = visual_annotations[image_idx]["boundingBoxes"]
         if len(gold_bbox) == 0:
             results.append(pred_dict)
             continue
@@ -238,6 +238,7 @@ def main(args):
             k: torch.cat((v1, v2))
             for (k, v1), (_, v2) in zip(gold_dict.items(), pred_dict.items())
         }
+        res["image_id"] = image_idx + 1     # NOTE: `image_id` is 1-origin
         results.append(res)
     # save
     output_path = args.output_dir / f"{file_name}.pth"
