@@ -1,10 +1,13 @@
 [tool.poetry]
-name = "regionclip"
+name = "RegionCLIP"
 version = "0.1.0"
 description = ""
 authors = ["SInadumi <inazumi19@icloud.com>"]
 readme = "README.md"
-# package-mode = false
+package-mode = true
+packages = [
+    { "include" = "detectron2" }
+]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.10"
@@ -46,6 +49,7 @@ pygments = ">=2.2"
 psutil = "^6.0.0"
 panopticapi = {url = "https://github.com/cocodataset/panopticapi/archive/master.zip"}
 numpy = "^1.24.4"
+regex = "^2024.9.11"
 
 [build-system]
 requires = ["poetry-core"]

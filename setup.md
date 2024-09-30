@@ -1,11 +1,10 @@
-### setup by poetry
+### Installation from `pyproject.toml` with poetry
 ```
 poetry init
 poetry install
-python setup.py develop # XXX: no longer works "poetry install"
 ```
 
-### setup by miniconda
+### Installation from `setup.py` with miniconda
 ```
 conda install pytorch=1.9.0 torchvision=0.10.0 pytorch-cuda=12.1 -c pytorch -c nvidia
 source activate regionclip
