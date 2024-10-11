@@ -50,6 +50,8 @@ psutil = "^6.0.0"
 panopticapi = {url = "https://github.com/cocodataset/panopticapi/archive/master.zip"}
 numpy = "^1.24.4"
 regex = "^2024.9.11"
+dataclasses-json = "^0.6.1"
+pydantic = "^2.9.2"
 
 [build-system]
 requires = ["poetry-core"]
