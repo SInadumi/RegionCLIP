@@ -4,12 +4,12 @@
 A script for region feature extraction
 """
 
-import os
 import torch
 import numpy as np
-import time
 import json
-import pathlib
+import h5py
+import logging
+from pathlib import Path
 
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
@@ -24,10 +24,11 @@ from detectron2.structures import Boxes
 import detectron2.data.detection_utils as utils
 import detectron2.data.transforms as T
 
+from tools.utils.annotation import ImageTextAnnotation
+
 lvis_categories = json.load(open("./lvis_categories.json", "r", encoding="utf-8"))
-lvis_categories.append(
-    "region"
-)  # J-CRe3における "className: 'region'" への対応．最終番地にインデックスを取る．
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def setup(args):
@@ -156,13 +157,14 @@ def extract_region_feats(cfg, model, batched_inputs, gold_bbox=None):
         ].cpu()  # region features, [#boxes, d]
 
     else:
-        boxes = torch.tensor([list(x["rect"].values()) for x in gold_bbox]).to(
+        boxes = torch.tensor([list(x.rect.to_xyxy()) for x in gold_bbox]).to(
             model.device
         )
         # resize boxes
         scaled_boxes = Boxes(boxes)
         scaled_boxes.scale(
-            scale_x=batched_inputs[im_id]["scale_x"], scale_y=batched_inputs[im_id]["scale_y"]
+            scale_x=batched_inputs[im_id]["scale_x"],
+            scale_y=batched_inputs[im_id]["scale_y"],
         )
 
         box_features = model.roi_heads._shared_roi_transform(
@@ -175,7 +177,7 @@ def extract_region_feats(cfg, model, batched_inputs, gold_bbox=None):
         boxes = boxes.cpu()
         scores = torch.tensor([1.0] * boxes.size()[0], dtype=torch.float32)
         classes = torch.tensor(
-            [lvis_categories.index(x["className"]) for x in gold_bbox],
+            [lvis_categories.index(x.className) for x in gold_bbox],
             dtype=torch.float32,
         )
         region_feats = att_feats.cpu()
@@ -194,77 +196,96 @@ def main(args):
     cfg = setup(args)
     model = create_model(cfg)
 
-    assert args.input_dir and args.output_dir
-    assert args.visual_path
+    assert args.input_root and args.output_root
+    visual_dir = Path(args.input_root) / "visual_annotations"
+    image_root = Path(args.input_root) / "recording"
+    id_root = Path(args.input_root) / "id"
+    output_root = Path(args.output_root)
 
-    # input images and annotations
-    image_files = [(args.input_dir / x) for x in os.listdir(args.input_dir)]
-    file_name = args.input_dir.parent.name
-    visual_annotations = json.load(open(args.visual_path, "r", encoding="utf-8"))[
-        "images"
-    ]
-
-    assert len(image_files) == len(visual_annotations)
-
-    # extract features per images
-    start = time.time()
-    results = []
-    for image_idx, img_file_name in enumerate(image_files):
-        res = []
-        if (image_idx + 1) % 100 == 0:
-            print("Used {} seconds for 100 images.".format(time.time() - start))
-            start = time.time()
-
-        # get input images and annots
-        image = utils.read_image(img_file_name, format="BGR")
-        batched_inputs = get_inputs(cfg, image)
-
-        # extract region features
-        with torch.no_grad():
-            pred_dict = extract_region_feats(cfg, model, batched_inputs)
-
-        # extract gold features
-        # # [ {"imageId", "instanceId", "rect", "className"}, ... ]
-        gold_bbox = visual_annotations[image_idx]["boundingBoxes"]
-        if len(gold_bbox) == 0:
-            results.append(pred_dict)
+    vis_id2split = {}
+    for id_file in id_root.glob("*.id"):
+        if id_file.stem not in {"train", "valid", "val", "test"}:
             continue
+        split = "valid" if id_file.stem == "val" else id_file.stem
+        output_root.joinpath(split).mkdir(parents=True, exist_ok=True)
+        for vis_id in id_file.read_text().splitlines():
+            vis_id2split[vis_id] = split
 
-        # extract region features
-        with torch.no_grad():
-            gold_dict = extract_region_feats(cfg, model, batched_inputs, gold_bbox)
+    visual_paths = visual_dir.glob("*.json")
+    image_ext = "png"
+    if args.dataset_name == "f30k_ent_jp":
+        image_ext = "jpg"
+    with h5py.File(output_root / f"{args.output_file_name}.h5", mode="w") as output_fp:
+        for source in visual_paths:
+            scenario_id = source.stem
+            logger.info(
+                f"[ScenarioID: {scenario_id}] Running object feature extraction"
+            )
+            # print(f"[ScenarioID: {scenario_id}] Running object feature extraction")
 
-        res = {
-            k: torch.cat((v1, v2))
-            for (k, v1), (_, v2) in zip(gold_dict.items(), pred_dict.items())
-        }
-        res["image_id"] = image_idx + 1     # NOTE: `image_id` is 1-origin
-        results.append(res)
-    # save
-    output_path = args.output_dir / f"{file_name}.pth"
-    torch.save(results, output_path)
+            image_dir = image_root / scenario_id / "images"
+            image_text_annotation = ImageTextAnnotation.from_json(
+                Path(source).read_text()
+            )
+            image_files = [
+                (image_dir / f"{image.imageId}.{image_ext}")
+                for image in image_text_annotation.images
+            ]
 
-    print("done!")
+            # extract features per images
+            for image_idx, img_file_name in enumerate(image_files):
+                image_id = img_file_name.stem
+
+                # image_id = img_file_name.stem
+                image = utils.read_image(img_file_name, format="BGR")
+                batched_inputs = get_inputs(cfg, image)
+
+                # extract region features
+                with torch.no_grad():
+                    output_dict = extract_region_feats(cfg, model, batched_inputs)
+
+                # extract gold features
+                gold_bbox = image_text_annotation.images[image_idx].boundingBoxes
+                # remove 'region' classes
+                gold_bbox = [bbox for bbox in gold_bbox if bbox.className != "region"]
+
+                if len(gold_bbox) > 0 and args.dataset_name == "jcre3":
+                    # extract region features
+                    with torch.no_grad():
+                        gold_dict = extract_region_feats(
+                            cfg, model, batched_inputs, gold_bbox
+                        )
+                    output_dict = {
+                        k: torch.cat((v1, v2))
+                        for (k, v1), (_, v2) in zip(
+                            gold_dict.items(), output_dict.items()
+                        )
+                    }
+
+                output_fp.create_dataset(
+                    f"{scenario_id}/{image_id}/boxes", data=output_dict["boxes"]
+                )
+                output_fp.create_dataset(
+                    f"{scenario_id}/{image_id}/scores", data=output_dict["scores"]
+                )
+                output_fp.create_dataset(
+                    f"{scenario_id}/{image_id}/classes", data=output_dict["classes"]
+                )
+                output_fp.create_dataset(
+                    f"{scenario_id}/{image_id}/feats", data=output_dict["feats"]
+                )
+                # NOTE: 配列としてアクセス可能
+                # e.g.) output_fp[f"{scenario_id}/{image_id}/boxes"][0]
 
 
 if __name__ == "__main__":
     parser = default_argument_parser()
     parser.add_argument(
-        "--input-dir", type=pathlib.Path, default=None, help="Path to image directry"
+        "--input-root", type=str, help="path to input visual annotation dir"
     )
-    parser.add_argument(
-        "--output-dir",
-        type=pathlib.Path,
-        required=True,
-        help="A scenario id file to save output bounding boxes",
-    )
-    parser.add_argument(
-        "--visual-path",
-        type=pathlib.Path,
-        default=None,
-        help="Path to J-CRe3 visual annotations",
-    )
-
+    parser.add_argument("--output-root", type=str, help="path to output dir")
+    parser.add_argument("--dataset-name", type=str, choices=["jcre3", "f30k_ent_jp"])
+    parser.add_argument("--output-file-name", type=str, default="default")
     args = parser.parse_args()
     print("Command Line Args:", args)
     launch(
