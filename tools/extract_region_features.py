@@ -249,7 +249,7 @@ def main(args):
                 # remove 'region' classes
                 gold_bbox = [bbox for bbox in gold_bbox if bbox.className != "region"]
 
-                if len(gold_bbox) > 0 and args.dataset_name == "jcre3":
+                if len(gold_bbox) > 0 and args.dataset_name == "jcre3" and args.eval_gold:
                     # extract region features
                     with torch.no_grad():
                         gold_dict = extract_region_feats(
@@ -286,6 +286,7 @@ if __name__ == "__main__":
     parser.add_argument("--output-root", type=str, help="path to output dir")
     parser.add_argument("--dataset-name", type=str, choices=["jcre3", "f30k_ent_jp"])
     parser.add_argument("--output-file-name", type=str, default="default")
+    parser.add_argument("--eval-gold", action="store_true")
     args = parser.parse_args()
     print("Command Line Args:", args)
     launch(
