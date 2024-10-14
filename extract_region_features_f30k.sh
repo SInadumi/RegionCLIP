@@ -6,7 +6,6 @@ readonly OUTPUT_ROOT="/mnt/home/shun-i/dev/cl_mmref/data/f30k_ent_jp"
 
 MODEL_WEIGHTS=regionclip_pretrained-cc_rn50
 
-# NOTE: Configuration when using the poetry
 poetry run python -u tools/extract_region_features.py \
     --input-root ${INPUT_ROOT} \
     --output-root ${OUTPUT_ROOT} \
