@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 
 set -euxo pipefail
-readonly INPUT_ROOT="/mnt/home/shun-i/datasets/J-CRe3"
-readonly OUTPUT_ROOT="/mnt/home/shun-i/dev/cl_mmref/data/jcre3"
+readonly ROOT_DIR="path/to/data/jcre3"
 
 MODEL_WEIGHTS=regionclip_pretrained-cc_rn50
 
 poetry run python -u tools/extract_region_features.py \
-    --input-root ${INPUT_ROOT} \
-    --output-root ${OUTPUT_ROOT} \
+    --root-dir ${ROOT_DIR} \
     --dataset-name jcre3 \
     --eval-gold \
     --output-file CLIP_fast_rcnn_R_50_C4_zsinf_w_GT \
@@ -23,8 +21,7 @@ poetry run python -u tools/extract_region_features.py \
     SEED 10
 
 poetry run python -u tools/extract_region_features.py \
-    --input-root ${INPUT_ROOT} \
-    --output-root ${OUTPUT_ROOT} \
+    --root-dir ${ROOT_DIR} \
     --dataset-name jcre3 \
     --output-file CLIP_fast_rcnn_R_50_C4_zsinf \
     --config-file configs/LVISv1-InstanceSegmentation/CLIP_fast_rcnn_R_50_C4_zsinf.yaml \

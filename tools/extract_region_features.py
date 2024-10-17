@@ -196,11 +196,10 @@ def main(args):
     cfg = setup(args)
     model = create_model(cfg)
 
-    assert args.input_root and args.output_root
-    visual_dir = Path(args.input_root) / "visual_annotations"
-    image_root = Path(args.input_root) / "recording"
-    id_root = Path(args.input_root) / "id"
-    output_root = Path(args.output_root)
+    visual_dir = Path(args.root_dir) / "image_text_annotation"
+    image_root = Path(args.root_dir) / "recording"
+    id_root = Path(args.root_dir) / "id"
+    output_root = Path(args.root_dir)
 
     vis_id2split = {}
     for id_file in id_root.glob("*.id"):
@@ -281,11 +280,10 @@ def main(args):
 if __name__ == "__main__":
     parser = default_argument_parser()
     parser.add_argument(
-        "--input-root", type=str, help="path to input visual annotation dir"
+        "--root-dir", required=True, type=str, help="path to input/output annotation dir"
     )
-    parser.add_argument("--output-root", type=str, help="path to output dir")
-    parser.add_argument("--dataset-name", type=str, choices=["jcre3", "f30k_ent_jp"])
-    parser.add_argument("--output-file-name", type=str, default="default")
+    parser.add_argument("--dataset-name", required=True, type=str, choices=["jcre3", "f30k_ent_jp"])
+    parser.add_argument("--output-file-name", required=True , type=str, default="default")
     parser.add_argument("--eval-gold", action="store_true")
     args = parser.parse_args()
     print("Command Line Args:", args)
