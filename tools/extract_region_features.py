@@ -198,17 +198,7 @@ def main(args):
 
     visual_dir = Path(args.root_dir) / "image_text_annotation"
     image_root = Path(args.root_dir) / "recording"
-    id_root = Path(args.root_dir) / "id"
     output_root = Path(args.root_dir)
-
-    vis_id2split = {}
-    for id_file in id_root.glob("*.id"):
-        if id_file.stem not in {"train", "valid", "val", "test"}:
-            continue
-        split = "valid" if id_file.stem == "val" else id_file.stem
-        output_root.joinpath(split).mkdir(parents=True, exist_ok=True)
-        for vis_id in id_file.read_text().splitlines():
-            vis_id2split[vis_id] = split
 
     visual_paths = visual_dir.glob("*.json")
     image_ext = "png"
@@ -241,37 +231,19 @@ def main(args):
 
                 # extract region features
                 with torch.no_grad():
-                    output_dict = extract_region_feats(cfg, model, batched_inputs)
-
-                # extract gold features
-                gold_bbox = image_text_annotation.images[image_idx].boundingBoxes
-                # remove 'region' classes
-                gold_bbox = [bbox for bbox in gold_bbox if bbox.className != "region"]
-
-                if len(gold_bbox) > 0 and args.dataset_name == "jcre3" and args.eval_gold:
-                    # extract region features
-                    with torch.no_grad():
-                        gold_dict = extract_region_feats(
-                            cfg, model, batched_inputs, gold_bbox
-                        )
-                    output_dict = {
-                        k: torch.cat((v1, v2))
-                        for (k, v1), (_, v2) in zip(
-                            gold_dict.items(), output_dict.items()
-                        )
-                    }
+                    output = extract_region_feats(cfg, model, batched_inputs)
 
                 output_fp.create_dataset(
-                    f"{scenario_id}/{image_id}/boxes", data=output_dict["boxes"]
+                    f"{scenario_id}/{image_id}/boxes", data=output["boxes"]
                 )
                 output_fp.create_dataset(
-                    f"{scenario_id}/{image_id}/scores", data=output_dict["scores"]
+                    f"{scenario_id}/{image_id}/scores", data=output["scores"]
                 )
                 output_fp.create_dataset(
-                    f"{scenario_id}/{image_id}/classes", data=output_dict["classes"]
+                    f"{scenario_id}/{image_id}/classes", data=output["classes"]
                 )
                 output_fp.create_dataset(
-                    f"{scenario_id}/{image_id}/feats", data=output_dict["feats"]
+                    f"{scenario_id}/{image_id}/feats", data=output["feats"]
                 )
                 # NOTE: 配列としてアクセス可能
                 # e.g.) output_fp[f"{scenario_id}/{image_id}/boxes"][0]
@@ -280,10 +252,17 @@ def main(args):
 if __name__ == "__main__":
     parser = default_argument_parser()
     parser.add_argument(
-        "--root-dir", required=True, type=str, help="path to input/output annotation dir"
+        "--root-dir",
+        required=True,
+        type=str,
+        help="path to input/output annotation dir",
     )
-    parser.add_argument("--dataset-name", required=True, type=str, choices=["jcre3", "f30k_ent_jp"])
-    parser.add_argument("--output-file-name", required=True , type=str, default="default")
+    parser.add_argument(
+        "--dataset-name", required=True, type=str, choices=["jcre3", "f30k_ent_jp"]
+    )
+    parser.add_argument(
+        "--output-file-name", required=True, type=str, default="default"
+    )
     parser.add_argument("--eval-gold", action="store_true")
     args = parser.parse_args()
     print("Command Line Args:", args)
