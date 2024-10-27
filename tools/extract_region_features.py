@@ -24,7 +24,7 @@ from detectron2.structures import Boxes
 import detectron2.data.detection_utils as utils
 import detectron2.data.transforms as T
 
-from tools.utils.annotation import ImageTextAnnotation
+from dataset_utils.annotation import ImageTextAnnotation
 
 lvis_categories = json.load(open("./lvis_categories.json", "r", encoding="utf-8"))
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def setup(args):
 
 
 def get_inputs(cfg, image):
-    """Given a file name, return a list of dictionary with each dict corresponding to an image
+    """Given a image return a list of dictionary with each dict corresponding to an image
     (refer to detectron2/data/dataset_mapper.py)
     """
     # image loading
@@ -104,7 +104,7 @@ def create_model(cfg):
     return model
 
 
-def extract_region_feats(cfg, model, batched_inputs, gold_bbox=None):
+def extract_region_feats(model, batched_inputs, gold_bbox=None):
     """Given a model and the input images, extract region features and save detection outputs into a local file
     (refer to detectron2/modeling/meta_arch/clip_rcnn.py)
     """
@@ -224,13 +224,11 @@ def main(args):
             # extract features per images
             for image_idx, img_file_name in enumerate(image_files):
                 image_id = img_file_name.stem
-
                 # image_id = img_file_name.stem
                 image = utils.read_image(img_file_name, format="BGR")
-                batched_inputs = get_inputs(cfg, image)
-
                 # extract region features
                 with torch.no_grad():
+                    batched_inputs = get_inputs(cfg, image)
                     output = extract_region_feats(cfg, model, batched_inputs)
 
                 output_fp.create_dataset(
