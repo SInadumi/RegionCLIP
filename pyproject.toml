@@ -6,7 +6,8 @@ authors = ["SInadumi <inazumi19@icloud.com>"]
 readme = "README.md"
 package-mode = true
 packages = [
-    { "include" = "detectron2" }
+    { "include" = "detectron2" },
+    { include = "dataset_utils", from = "tools" }
 ]
 
 [tool.poetry.dependencies]
