@@ -104,7 +104,7 @@ def create_model(cfg):
     return model
 
 
-def extract_region_feats(model, batched_inputs, gold_bbox=None):
+def extract_region_feats(model, batched_inputs):
     """Given a model and the input images, extract region features and save detection outputs into a local file
     (refer to detectron2/modeling/meta_arch/clip_rcnn.py)
     """
@@ -121,66 +121,37 @@ def extract_region_feats(model, batched_inputs, gold_bbox=None):
     images = model.preprocess_image(batched_inputs)
     features = model.backbone(images.tensor)
 
-    if gold_bbox is None:
-        # 3. given the proposals, crop region features from 2D image features
-        proposal_boxes = [x.proposal_boxes for x in proposals]
-        box_features = model.roi_heads._shared_roi_transform(
-            [features[f] for f in model.roi_heads.in_features],
-            proposal_boxes,
-            model.backbone.layer4,
-        )
-        att_feats = model.backbone.attnpool(box_features)
+    # 3. given the proposals, crop region features from 2D image features
+    proposal_boxes = [x.proposal_boxes for x in proposals]
+    box_features = model.roi_heads._shared_roi_transform(
+        [features[f] for f in model.roi_heads.in_features],
+        proposal_boxes,
+        model.backbone.layer4,
+    )
+    att_feats = model.backbone.attnpool(box_features)
 
-        # 4. prediction head classifies the regions (optional)
-        predictions = model.roi_heads.box_predictor(
-            att_feats
-        )  # predictions[0]: class logits; predictions[1]: box delta
-        pred_instances, keep_indices = model.roi_heads.box_predictor.inference(
-            predictions, proposals
-        )  # apply per-class NMS
-        results = model._postprocess(
-            pred_instances, batched_inputs
-        )  # re-scale boxes back to original image size
+    # 4. prediction head classifies the regions (optional)
+    predictions = model.roi_heads.box_predictor(
+        att_feats
+    )  # predictions[0]: class logits; predictions[1]: box delta
+    pred_instances, keep_indices = model.roi_heads.box_predictor.inference(
+        predictions, proposals
+    )  # apply per-class NMS
+    results = model._postprocess(
+        pred_instances, batched_inputs
+    )  # re-scale boxes back to original image size
 
-        # save detection outputs into files
-        boxes = (
-            results[im_id]["instances"].get("pred_boxes").tensor.cpu()
-        )  # boxes after per-class NMS, [#boxes, 4]
-        scores = (
-            results[im_id]["instances"].get("scores").cpu()
-        )  # scores after per-class NMS, [#boxes]
-        classes = (
-            results[im_id]["instances"].get("pred_classes").cpu()
-        )  # class predictions after per-class NMS, [#boxes], class value in [0, C]
-        region_feats = att_feats[
-            keep_indices[im_id]
-        ].cpu()  # region features, [#boxes, d]
-
-    else:
-        boxes = torch.tensor([list(x.rect.to_xyxy()) for x in gold_bbox]).to(
-            model.device
-        )
-        # resize boxes
-        scaled_boxes = Boxes(boxes)
-        scaled_boxes.scale(
-            scale_x=batched_inputs[im_id]["scale_x"],
-            scale_y=batched_inputs[im_id]["scale_y"],
-        )
-
-        box_features = model.roi_heads._shared_roi_transform(
-            [features[f] for f in model.roi_heads.in_features],
-            [scaled_boxes],
-            model.backbone.layer4,
-        )
-        att_feats = model.backbone.attnpool(box_features)  # region features
-
-        boxes = boxes.cpu()
-        scores = torch.tensor([1.0] * boxes.size()[0], dtype=torch.float32)
-        classes = torch.tensor(
-            [lvis_categories.index(x.className) for x in gold_bbox],
-            dtype=torch.float32,
-        )
-        region_feats = att_feats.cpu()
+    # save detection outputs into files
+    boxes = (
+        results[im_id]["instances"].get("pred_boxes").tensor.cpu()
+    )  # boxes after per-class NMS, [#boxes, 4]
+    scores = (
+        results[im_id]["instances"].get("scores").cpu()
+    )  # scores after per-class NMS, [#boxes]
+    classes = (
+        results[im_id]["instances"].get("pred_classes").cpu()
+    )  # class predictions after per-class NMS, [#boxes], class value in [0, C]
+    region_feats = att_feats[keep_indices[im_id]].cpu()  # region features, [#boxes, d]
 
     # save features of detection regions (after per-class NMS)
     saved_dict = {}
@@ -229,7 +200,7 @@ def main(args):
                 # extract region features
                 with torch.no_grad():
                     batched_inputs = get_inputs(cfg, image)
-                    output = extract_region_feats(cfg, model, batched_inputs)
+                    output = extract_region_feats(model, batched_inputs)
 
                 output_fp.create_dataset(
                     f"{scenario_id}/{image_id}/boxes", data=output["boxes"]

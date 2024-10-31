@@ -8,9 +8,9 @@ MODEL_WEIGHTS=regionclip_pretrained-cc_rn50
 poetry run python -u tools/extract_region_features.py \
     --root-dir ${ROOT_DIR} \
     --dataset-name jcre3 \
-    --output-file "${CONFIG_FILE}" \
+    --output-file-name "${CONFIG_FILE}" \
     --config-file "configs/LVISv1-InstanceSegmentation/${CONFIG_FILE}.yaml" \
-    TEST.DETECTIONS_PER_IMAGE 64 \
+    TEST.DETECTIONS_PER_IMAGE 256 \
     MODEL.WEIGHTS pretrained_ckpt/regionclip/${MODEL_WEIGHTS}.pth \
     MODEL.CLIP.TEXT_EMB_PATH pretrained_ckpt/concept_emb/lvis_1203_cls_emb.pth \
     MODEL.CLIP.CROP_REGION_TYPE RPN \
